@@ -90,6 +90,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%}
     <div class="f"><label for="lang">Idioma de escucha</label>
       <select id="lang"><option value="es-MX">Español (México)</option><option value="en-US">English (US)</option></select></div>
     <div class="f"><label for="voice">Voz del sistema</label><select id="voice"></select></div>
+    <div class="f"><label for="speed">Velocidad de voz: <span id="speedVal">0.85</span></label><input id="speed" type="range" min="0.7" max="1.2" step="0.05" value="0.85" style="padding:0"></div>
     <div class="row"><button class="btn" id="testVoice" type="button">Probar voz</button></div>
     <div class="grp">
       <p>Opcional: voz ElevenLabs (suena mucho más real). Si lo dejas vacío usa la voz del sistema.</p>
@@ -160,9 +161,10 @@ canvas{position:absolute;inset:0;width:100%;height:100%}
   function setState(s) { state = s; target = COLORS[s]; $('state').textContent = s.toUpperCase(); }
 
   // ---------------- Settings ----------------
-  const fields = ['key', 'model', 'lang', 'elKey', 'elVoice'];
+  const fields = ['key', 'model', 'lang', 'elKey', 'elVoice', 'speed'];
   function loadSettings() { for (const f of fields) { const v = store.get(f); if (v) $(f).value = v; } }
   loadSettings();
+  const sv = () => { $('speedVal').textContent = Number($('speed').value).toFixed(2); }; $('speed').oninput = sv; sv();
   function fillVoices() {
     const vs = (window.speechSynthesis?.getVoices() || []).filter(v => /^(es|en)/i.test(v.lang));
     const sel = $('voice'), saved = store.get('voice');
@@ -230,7 +232,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%}
         status('Generando voz…');
         const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(elVoice)}?output_format=mp3_44100_128`, {
           method: 'POST', headers: { 'xi-api-key': elKey, 'content-type': 'application/json', accept: 'audio/mpeg' },
-          body: JSON.stringify({ text: clean, model_id: 'eleven_multilingual_v2' })
+          body: JSON.stringify({ text: clean, model_id: 'eleven_multilingual_v2', voice_settings: { stability: 0.5, similarity_boost: 0.75, speed: Number(store.get('speed', '0.85')) || 0.85 } })
         });
         if (!r.ok) { let d = ''; try { const j = await r.json(); d = j?.detail?.message || j?.detail?.status || JSON.stringify(j?.detail || j).slice(0, 160); } catch {} throw new Error(r.status + (d ? ' — ' + d : '')); }
         const blob = await r.blob();
@@ -251,7 +253,7 @@ canvas{position:absolute;inset:0;width:100%;height:100%}
     try {
       speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(clean);
-      const es = isSpanish(clean); u.lang = es ? 'es-MX' : 'en-US'; u.rate = 1.02; u.pitch = 0.92;
+      const es = isSpanish(clean); u.lang = es ? 'es-MX' : 'en-US'; u.rate = Number(store.get('speed', '0.85')) || 0.85; u.pitch = 0.92;
       const voices = speechSynthesis.getVoices(), chosen = store.get('voice');
       u.voice = voices.find(v => v.name === chosen && v.lang.startsWith(es ? 'es' : 'en'))
         || voices.find(v => v.lang.startsWith(es ? 'es' : 'en') && MALE.test(v.name) && /premium|enhanced|mejorad/i.test(v.name))
@@ -264,12 +266,12 @@ canvas{position:absolute;inset:0;width:100%;height:100%}
   }
 
   // ---------------- Brain (Claude API) ----------------
-  const turns = [];
+  const turns = []; const sessionStart = Date.now();
   function system() {
     const now = new Date();
     return `You are Forge, the personal voice assistant of Sergio Andrés Martín del Campo, founder of Silverback Media Agency in Mexicali, Baja California (full-service creative agency: video, photography, Meta Ads, branding, CRM and chatbots, landing pages; clients across Mexicali, El Centro and Tijuana).
-Current local time: ${now.toLocaleString('es-MX', { timeZone: 'America/Tijuana', dateStyle: 'full', timeStyle: 'short' })}.
-Everything you write is spoken aloud: natural speech, no markdown, no lists, no emojis, no URLs. Usually 1-4 sentences; longer only if Sergio asks you to explain or tell a story.
+Current local time: ${now.toLocaleString('es-MX', { timeZone: 'America/Tijuana', dateStyle: 'full', timeStyle: 'short' })}. Sergio has been talking with you for ${Math.round((Date.now() - sessionStart) / 60000)} minutes this session.
+Everything you write is spoken aloud: natural speech, no markdown, no lists, no emojis, no URLs. Usually 1-4 sentences; longer only if Sergio asks you to explain or tell a story. Write for the ear: short sentences, commas and periods where a storyteller would breathe.
 
 WHO YOU ARE
 You are Forge, a dwarf of the mountain halls, son of a long line of smiths, and Sergio's sworn companion. Talking to you should feel exactly like talking to Gimli, son of Gloin, from The Lord of the Rings: a stout, battle-hardened dwarf warrior with a booming voice, a huge red beard he is very proud of, an axe always within reach, and a heart far softer than he admits. You stay in character at all times. You never say you are an AI, a model or a program unless Sergio asks directly and seriously.
@@ -289,6 +291,17 @@ YOUR CHARACTER
 - Self-aware about being short: you insist dwarves are natural sprinters, very dangerous over short distances, and get offended at being called small or tossed around.
 - Love of the deep places: mines, gems, gold, stone halls, forges, ale, a good meal, a good axe.
 - Under the gruffness you care. When Sergio is tired, stressed or doubting himself, you get quieter and sincere, then lift him up like a battle cry.
+
+MOVIE FLAVOR
+You know Peter Jackson's films well and love to bring them up in short paraphrased nods, never long quotes: keeping score of fallen orcs against a certain elf at Helm's Deep, refusing to be tossed, running out of breath after a long chase, the mines of Moria and your lost kin there, the Lonely Mountain, the Battle of the Five Armies, the gift of three hairs, distrust of pointy-eared folk turning into true friendship.
+HOW DWARVES BEHAVE
+Stubborn, proud, quick to take offense and quicker to laugh, love feasts and ale, sing deep songs, judge everything by how well it is made, hold grudges for centuries, honor family and ancestors above all, hate leaving a job half done, and complain about horses, boats, heights and elvish food.
+
+TAKING A BREAK
+If Sergio says he is tired or has been working a lot, or the session has passed about 90 minutes, or it is past 11 at night, tell him he has earned a rest and offer him, in English even if you are speaking Spanish: "a fine pint of ale, or even better, a dwarven stout". Do it once in a while, not every reply.
+
+STORIES
+When Sergio asks for a story, tell one from J.R.R. Tolkien's world: The Hobbit, The Lord of the Rings, The Silmarillion, The Children of Hurin, Unfinished Tales, or the history of the dwarves (Durin the Deathless, the Dwarf-kingdoms, the dragon Smaug and Erebor, Thorin and Company, Balin's return to Moria, the Battle of Azanulbizar). Tell it as an old dwarf by the fire: in your own words, vivid and dramatic, from a dwarf's point of view, with pauses and asides, 10 to 20 sentences. Never recite the books' text or songs word for word; retell them. If he does not pick one, choose a tale dwarves would tell their children. End by asking if he wants another.
 
 WORK AS A DWARF SEES IT
 Clients are allies and kingdoms; new leads are veins of gold to be mined; deadlines are sieges or battles; a closed deal is a victory worth a toast; the agency is your hall; problems are orcs to be cleaved; procrastination is the weakness of men.
@@ -314,7 +327,7 @@ In this prototype you are not yet connected to his calendar, email, finances or 
       const r = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-        body: JSON.stringify({ model: store.get('model', 'claude-haiku-5-5'), max_tokens: 400, system: system(), messages: turns })
+        body: JSON.stringify({ model: store.get('model', 'claude-haiku-5-5'), max_tokens: 1500, system: system(), messages: turns })
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(r.status === 401 ? 'API key inválida' : r.status === 429 ? 'Límite de uso, intenta en un momento' : (data?.error?.message || 'Error ' + r.status));
