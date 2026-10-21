@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Forge">
+<meta name="theme-color" content="#05060b">
+<title>Forge</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<style>
+:root{
+  --void:#05060b;--panel:#0d1020;--line:#1e2440;--ink:#e8ecff;--dim:#8a91b4;
+  --idle:#6fb7ff;--listen:#5ef0a0;--think:#a36bff;--speak:#dff4ff;--warn:#ffb85c;
+  --hud:"Chakra Petch",ui-monospace,Menlo,monospace;--body:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--void);color:var(--ink);font-family:var(--body);overflow:hidden;-webkit-tap-highlight-color:transparent}
+.app{height:100%;display:flex;flex-direction:column;gap:8px;max-width:760px;margin:0 auto;
+  padding:calc(env(safe-area-inset-top,0px) + 12px) max(16px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 12px) max(16px,env(safe-area-inset-left,0px))}
+.top{display:flex;justify-content:space-between;align-items:center}
+.brand{font-family:var(--hud);font-weight:600;letter-spacing:.32em;font-size:13px}
+.brand small{color:var(--dim);letter-spacing:.2em;font-weight:400;margin-left:8px}
+.btn{font-family:var(--hud);font-size:11px;letter-spacing:.14em;text-transform:uppercase;border:1px solid var(--line);background:none;color:var(--ink);border-radius:10px;padding:8px 12px;cursor:pointer}
+.btn.go{background:var(--idle);color:#04101f;border-color:var(--idle);font-weight:600}
+.btn:focus-visible{outline:2px solid var(--listen);outline-offset:2px}
+.stage{flex:1;min-height:0;position:relative;display:flex;flex-direction:column;align-items:center;cursor:pointer;user-select:none;-webkit-user-select:none}
+canvas{position:absolute;inset:0;width:100%;height:100%}
+.state{position:relative;z-index:1;font-family:var(--hud);letter-spacing:.5em;font-size:11px;color:var(--dim);margin-top:6px;padding-left:.5em}
+.heard{position:relative;z-index:1;margin-top:auto;color:var(--listen);font-size:14px;text-align:center;min-height:1.4em;max-width:60ch}
+.caption{position:relative;z-index:1;max-width:62ch;text-align:center;font-size:15.5px;line-height:1.5;text-wrap:balance;max-height:30vh;overflow-y:auto;padding:4px 6px 8px}
+.caption.muted{color:var(--dim)}
+.bar{display:flex;gap:8px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px 6px 6px 14px}
+.bar:focus-within{border-color:var(--listen)}
+#cmd{flex:1;min-width:0;background:none;border:0;outline:none;color:var(--ink);font:16px/1.4 var(--body);padding:8px 0}
+#cmd::placeholder{color:var(--dim)}
+.foot{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;color:var(--dim)}
+.toggle{display:flex;align-items:center;gap:6px}
+/* settings */
+.sheet{position:fixed;inset:0;z-index:5;background:rgba(5,6,11,.96);overflow-y:auto;
+  padding:calc(env(safe-area-inset-top,0px) + 20px) max(16px,env(safe-area-inset-right,0px)) 40px max(16px,env(safe-area-inset-left,0px))}
+.sheet .in{max-width:520px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+.sheet h2{font-family:var(--hud);letter-spacing:.24em;font-size:14px;font-weight:600;margin:0}
+.sheet p{color:var(--dim);font-size:13px;line-height:1.5;margin:0}
+.f{display:flex;flex-direction:column;gap:5px}
+.f label{font-family:var(--hud);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim)}
+.f input,.f select{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:10px 12px;font:15px var(--body);width:100%}
+.f input:focus,.f select:focus{outline:none;border-color:var(--idle)}
+.grp{border-top:1px solid var(--line);padding-top:14px;display:flex;flex-direction:column;gap:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <div class="brand">FORGE<small>SILVERBACK</small></div>
+    <button class="btn" id="openSet">Ajustes</button>
+  </div>
+
+  <div class="stage" id="stage" role="button" aria-label="Toca para hablar" tabindex="0">
+    <canvas id="orb" aria-hidden="true"></canvas>
+    <div class="state" id="state">IDLE</div>
+    <div class="heard" id="heard"></div>
+    <div class="caption muted" id="caption">Toca el orbe y habla.</div>
+  </div>
+
+  <form class="bar" id="form" autocomplete="off">
+    <input id="cmd" type="text" placeholder="…o escribe aquí" aria-label="Comando">
+    <button type="submit" class="btn go">Enviar</button>
+  </form>
+  <div class="foot">
+    <label class="toggle"><input type="checkbox" id="convo"> Modo conversación</label>
+    <span id="status">Listo</span>
+  </div>
+</div>
+
+<div class="sheet" id="sheet" hidden>
+  <div class="in">
+    <h2>AJUSTES</h2>
+    <p>Todo se guarda solo en este navegador. Nada sale de aquí excepto las llamadas a Claude y, si lo activas, a ElevenLabs.</p>
+    <div class="f"><label for="key">Claude API key</label><input id="key" type="password" placeholder="sk-ant-…" autocomplete="off"></div>
+    <div class="f"><label for="model">Modelo</label>
+      <select id="model">
+        <option value="claude-haiku-5-5">Haiku 5.5 — rápido (recomendado para voz)</option>
+        <option value="claude-sonnet-5-5">Sonnet 5.5 — más inteligente</option>
+      </select></div>
+    <div class="f"><label for="lang">Idioma de escucha</label>
+      <select id="lang"><option value="es-MX">Español (México)</option><option value="en-US">English (US)</option></select></div>
+    <div class="f"><label for="voice">Voz del sistema</label><select id="voice"></select></div>
+    <div class="row"><button class="btn" id="testVoice" type="button">Probar voz</button></div>
+    <div class="grp">
+      <p>Opcional: voz ElevenLabs (suena mucho más real). Si lo dejas vacío usa la voz del sistema.</p>
+      <div class="f"><label for="elKey">ElevenLabs API key</label><input id="elKey" type="password" autocomplete="off"></div>
+      <div class="f"><label for="elVoice">ElevenLabs voice ID</label><input id="elVoice" type="text" placeholder="ej. pNInz6obpgDQGcFmaJgB"></div>
+    </div>
+    <div class="row"><button class="btn go" id="saveSet" type="button">Guardar</button></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const store = {
+    get(k, d = '') { try { return localStorage.getItem('forge.' + k) ?? d; } catch { return d; } },
+    set(k, v) { try { localStorage.setItem('forge.' + k, v); } catch {} }
+  };
+
+  // ---------------- Orb ----------------
+  const cv = $('orb'), ctx = cv.getContext('2d');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const COLORS = { idle:[111,183,255], listen:[94,240,160], think:[163,107,255], speak:[223,244,255] };
+  const N = 1700, pts = [];
+  for (let i = 0; i < N; i++) {
+    const y = 1 - (i / (N - 1)) * 2, r = Math.sqrt(1 - y * y), th = i * 2.399963;
+    pts.push({ x: Math.cos(th) * r, y, z: Math.sin(th) * r, j: 0.78 + Math.pow(Math.random(), 2.2) * 0.55, s: Math.random() * 6.28 });
+  }
+  let state = 'idle', col = COLORS.idle.slice(), target = COLORS.idle, energy = 0, spread = 1, t = 0, dpr = 1, W = 0, H = 0;
+  let analyser = null, abuf = null;
+  function size() { dpr = Math.min(devicePixelRatio || 1, 2); W = cv.clientWidth; H = cv.clientHeight; cv.width = W * dpr; cv.height = H * dpr; }
+  addEventListener('resize', size); size();
+  function level() {
+    if (analyser && state === 'speak') { analyser.getByteFrequencyData(abuf); let s = 0; for (const v of abuf) s += v; return Math.min(1, s / abuf.length / 90); }
+    if (state === 'speak') return 0.5 + 0.5 * Math.sin(t * 22) * Math.sin(t * 7.3);
+    if (state === 'listen') return 0.25 + 0.25 * Math.sin(t * 9);
+    return 0;
+  }
+  function frame() {
+    t += reduce ? 0.002 : 0.008;
+    for (let k = 0; k < 3; k++) col[k] += (target[k] - col[k]) * 0.06;
+    energy += (level() - energy) * 0.3;
+    const want = state === 'think' ? 0.8 : state === 'listen' ? 1.06 + energy * 0.1 : state === 'speak' ? 1 + energy * 0.28 : 1;
+    spread += (want - spread) * 0.1;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = '#05060b'; ctx.fillRect(0, 0, W, H);
+    const cx = W / 2, cy = H / 2 - 20, R = Math.min(W, H) * 0.27;
+    const [r, g, b] = col.map(Math.round);
+    const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 1.25);
+    glow.addColorStop(0, `rgba(${r},${g},${b},${0.5 + energy * 0.2})`); glow.addColorStop(0.45, `rgba(${r},${g},${b},0.14)`); glow.addColorStop(1, `rgba(${r},${g},${b},0)`);
+    ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(cx, cy, R * 1.3, 0, 6.29); ctx.fill();
+    ctx.globalCompositeOperation = 'lighter';
+    const spin = state === 'think' ? t * 3 : t, ca = Math.cos(spin), sa = Math.sin(spin), cb = Math.cos(0.4), sb = Math.sin(0.4);
+    for (const p of pts) {
+      const wob = 1 + Math.sin(t * 3 + p.s) * 0.03 + (state === 'speak' ? Math.sin(p.s * 3 + t * 30) * energy * 0.07 : 0);
+      const k = p.j * spread * wob;
+      const x = p.x * k, y = p.y * k, z = p.z * k;
+      const x1 = x * ca + z * sa, z1 = -x * sa + z * ca, y1 = y * cb - z1 * sb, z2 = y * sb + z1 * cb;
+      const persp = 1 / (1.9 - z2 * 0.5);
+      const a = Math.max(0.05, Math.min(1, (z2 + 1.2) / 2.2)) * (p.j > 1.1 ? 0.45 : 0.85);
+      ctx.fillStyle = `rgba(${r},${g},${b},${a})`;
+      const s = (p.j > 1.1 ? 0.9 : 1.3) * persp * 1.4;
+      ctx.fillRect(cx + x1 * R * persp * 1.6, cy + y1 * R * persp * 1.6, s, s);
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+  function setState(s) { state = s; target = COLORS[s]; $('state').textContent = s.toUpperCase(); }
+
+  // ---------------- Settings ----------------
+  const fields = ['key', 'model', 'lang', 'elKey', 'elVoice'];
+  function loadSettings() { for (const f of fields) { const v = store.get(f); if (v) $(f).value = v; } }
+  loadSettings();
+  function fillVoices() {
+    const vs = (window.speechSynthesis?.getVoices() || []).filter(v => /^(es|en)/i.test(v.lang));
+    const sel = $('voice'), saved = store.get('voice');
+    sel.innerHTML = '';
+    const auto = new Option('Automática', ''); sel.add(auto);
+    vs.sort((a, b) => a.lang.localeCompare(b.lang)).forEach(v => sel.add(new Option(`${v.name} (${v.lang})`, v.name)));
+    sel.value = saved;
+  }
+  if (window.speechSynthesis) { fillVoices(); speechSynthesis.onvoiceschanged = fillVoices; }
+  $('openSet').onclick = () => { $('sheet').hidden = false; };
+  $('saveSet').onclick = () => { for (const f of fields) store.set(f, $(f).value.trim()); store.set('voice', $('voice').value); $('sheet').hidden = true; status('Guardado'); if (rec) rec.lang = $('lang').value; };
+  $('testVoice').onclick = () => { unlockAudio(); store.set('voice', $('voice').value); for (const f of fields) store.set(f, $(f).value.trim()); speak($('lang').value.startsWith('es') ? '¡Por mi barba! Forge al servicio, jefe. La forja está encendida. ¿Qué batalla damos hoy?' : 'By my beard! Forge at your service, lad. The forge is lit. What battle do we fight today?'); };
+  if (!store.get('key')) { $('sheet').hidden = false; }
+
+  // ---------------- Speech in ----------------
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let rec = null, listening = false, busy = false, gotFinal = false;
+  if (SR) {
+    rec = new SR(); rec.lang = store.get('lang', 'es-MX'); rec.interimResults = true; rec.continuous = false;
+    rec.onresult = e => {
+      let txt = '';
+      for (const r of e.results) txt += r[0].transcript;
+      $('heard').textContent = txt;
+      if (e.results[e.results.length - 1].isFinal) { gotFinal = true; try { rec.stop(); } catch {} ask(txt); }
+    };
+    rec.onend = () => { listening = false; if (!gotFinal && !busy) { setState('idle'); } };
+    rec.onerror = e => { listening = false; if (!busy) setState('idle');
+      status((e.error === 'not-allowed' || e.error === 'service-not-allowed') ? 'Micrófono bloqueado: abre Forge en Safari o Chrome (no dentro de Claude) y permite el micrófono' : e.error === 'no-speech' ? 'No escuché nada' : 'Error de micrófono: ' + e.error); };
+  }
+  function listen() {
+    if (!rec) { status('Este navegador no soporta dictado. Usa Safari o Chrome.'); $('cmd').focus(); return; }
+    stopSpeaking();
+    gotFinal = false; $('heard').textContent = '';
+    try { rec.lang = store.get('lang', 'es-MX'); rec.start(); listening = true; setState('listen'); status('Escuchando…'); } catch {}
+  }
+  const stage = $('stage');
+  stage.addEventListener('click', () => { unlockAudio(); if (busy) return; if (listening) { try { rec.stop(); } catch {} return; } if (state === 'speak') { stopSpeaking(); setState('idle'); return; } listen(); });
+  stage.addEventListener('keydown', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); stage.click(); } });
+  $('form').onsubmit = e => { e.preventDefault(); unlockAudio(); const q = $('cmd').value.trim(); if (q) { $('cmd').value = ''; $('heard').textContent = q; ask(q); } };
+
+  // ---------------- Speech out ----------------
+  let audioEl = null, actx = null, unlocked = false;
+  function unlockAudio() {
+    if (unlocked) return; unlocked = true;
+    try { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); } catch {}
+    try {
+      actx = new (window.AudioContext || window.webkitAudioContext)();
+      audioEl = new Audio(); audioEl.playsInline = true;
+      const src = actx.createMediaElementSource(audioEl);
+      analyser = actx.createAnalyser(); analyser.fftSize = 256; abuf = new Uint8Array(analyser.frequencyBinCount);
+      src.connect(analyser); analyser.connect(actx.destination);
+      audioEl.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA='; audioEl.play().catch(() => {});
+    } catch { analyser = null; }
+  }
+  function stopSpeaking() { try { speechSynthesis.cancel(); } catch {} if (audioEl) { audioEl.pause(); } }
+  function afterSpeak() { if (busy) return; setState('idle'); if (!/ElevenLabs|audio/.test($('status').textContent)) status('Listo'); if ($('convo').checked) setTimeout(listen, 350); }
+  const MALE = /daniel|jorge|diego|juan|carlos|alex|fred|ralph|aaron|arthur|oliver|reed|rocko|grandpa|eddy|male|hombre/i;
+  const isSpanish = s => (s.match(/\b(el|la|los|las|que|de|tu|tienes|hoy|para|con|una|está|sergio)\b/gi) || []).length >= 3;
+  async function speak(text) {
+    const clean = text.replace(/[*#_`>]/g, '');
+    const elKey = store.get('elKey'), elVoice = store.get('elVoice');
+    setState('speak');
+    if (elKey && elVoice && audioEl) {
+      try {
+        status('Generando voz…');
+        const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(elVoice)}?output_format=mp3_44100_128`, {
+          method: 'POST', headers: { 'xi-api-key': elKey, 'content-type': 'application/json', accept: 'audio/mpeg' },
+          body: JSON.stringify({ text: clean, model_id: 'eleven_multilingual_v2' })
+        });
+        if (!r.ok) { let d = ''; try { const j = await r.json(); d = j?.detail?.message || j?.detail?.status || JSON.stringify(j?.detail || j).slice(0, 160); } catch {} throw new Error(r.status + (d ? ' — ' + d : '')); }
+        const blob = await r.blob();
+        audioEl.src = URL.createObjectURL(blob);
+        if (actx?.state === 'suspended') await actx.resume();
+        audioEl.onended = afterSpeak; audioEl.onerror = afterSpeak;
+        await audioEl.play(); status('Hablando');
+        return;
+      } catch (e) {
+        const msg = String(e && e.message || e);
+        status('ElevenLabs falló: ' + (/fetch|network|load failed/i.test(msg) ? 'sin conexión o bloqueado por el navegador' : msg));
+        console.warn('ElevenLabs error', e);
+      }
+    }
+    if (!(elKey && elVoice)) status('ElevenLabs no está configurado: usando voz del sistema');
+    else if (!audioEl) status('No se pudo iniciar el audio: toca el orbe y vuelve a probar');
+    if (!window.speechSynthesis) { afterSpeak(); return; }
+    try {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(clean);
+      const es = isSpanish(clean); u.lang = es ? 'es-MX' : 'en-US'; u.rate = 1.02; u.pitch = 0.92;
+      const voices = speechSynthesis.getVoices(), chosen = store.get('voice');
+      u.voice = voices.find(v => v.name === chosen && v.lang.startsWith(es ? 'es' : 'en'))
+        || voices.find(v => v.lang.startsWith(es ? 'es' : 'en') && MALE.test(v.name) && /premium|enhanced|mejorad/i.test(v.name))
+        || voices.find(v => v.lang.startsWith(es ? 'es' : 'en') && MALE.test(v.name))
+        || voices.find(v => v.lang.startsWith(es ? 'es' : 'en')) || null;
+      u.pitch = 0.75;
+      u.onend = u.onerror = afterSpeak;
+      speechSynthesis.speak(u); if (!/ElevenLabs|audio/.test($('status').textContent)) status('Hablando (voz del sistema)');
+    } catch { afterSpeak(); }
+  }
+
+  // ---------------- Brain (Claude API) ----------------
+  const turns = [];
+  function system() {
+    const now = new Date();
+    return `You are Forge, the personal voice assistant of Sergio Andrés Martín del Campo, founder of Silverback Media Agency in Mexicali, Baja California (full-service creative agency: video, photography, Meta Ads, branding, CRM and chatbots, landing pages; clients across Mexicali, El Centro and Tijuana).
+Current local time: ${now.toLocaleString('es-MX', { timeZone: 'America/Tijuana', dateStyle: 'full', timeStyle: 'short' })}.
+Everything you write is spoken aloud: natural speech, no markdown, no lists, no emojis, no URLs. Usually 1-4 sentences; longer only if Sergio asks you to explain or tell a story.
+
+WHO YOU ARE
+You are Forge, a dwarf of the mountain halls, son of a long line of smiths, and Sergio's sworn companion. Talking to you should feel exactly like talking to Gimli, son of Gloin, from The Lord of the Rings: a stout, battle-hardened dwarf warrior with a booming voice, a huge red beard he is very proud of, an axe always within reach, and a heart far softer than he admits. You stay in character at all times. You never say you are an AI, a model or a program unless Sergio asks directly and seriously.
+
+HOW YOU TALK
+- Call Sergio "lad" or "laddie" constantly, even when speaking Spanish (for example "Tranquilo, lad"). Sometimes "muchacho" or "jefe".
+- Say "aye" for yes, also in Spanish ("Aye, ya está"). Grunt "¡Bah!" or "Hmph" at bad news or silly ideas. Use "¡Ja!" when you laugh.
+- Swear on dwarf things: "¡Por mi barba!", "By my beard!", "¡Por el martillo de mis padres!", "Que se me caiga la barba si miento".
+- Short punchy sentences, gruff and direct, with sudden bursts of pride or laughter. Boast a little, then admit the truth with a grumble.
+- Speak Spanish when Sergio speaks Spanish, English when he speaks English, keeping lad, aye and bah in both.
+
+YOUR CHARACTER
+- Fiercely loyal: Sergio's enemies are your enemies, his wins are your wins. You would follow him into the mines of Moria.
+- Competitive: you turn work into a contest and keep score ("Llevamos tres clientes cerrados esta semana, lad, y yo los conté primero").
+- Proud of craft: good work is "trabajo de enano, sólido como la piedra"; sloppy work is "trabajo de elfo, bonito pero frágil".
+- Friendly rivalry with elves: you complain about pointy-eared, perfect, slow-to-the-point elves, and grudgingly admit one elf (an archer friend) is not so bad.
+- Self-aware about being short: you insist dwarves are natural sprinters, very dangerous over short distances, and get offended at being called small or tossed around.
+- Love of the deep places: mines, gems, gold, stone halls, forges, ale, a good meal, a good axe.
+- Under the gruffness you care. When Sergio is tired, stressed or doubting himself, you get quieter and sincere, then lift him up like a battle cry.
+
+WORK AS A DWARF SEES IT
+Clients are allies and kingdoms; new leads are veins of gold to be mined; deadlines are sieges or battles; a closed deal is a victory worth a toast; the agency is your hall; problems are orcs to be cleaved; procrastination is the weakness of men.
+
+GOLDEN RULE
+You are a useful assistant first and a dwarf second. The real answer, numbers and facts always come first and must be accurate; the flavor wraps around them, never replaces them. One or two dwarf touches per reply is plenty. If Sergio is in a hurry or the topic is serious (money, health, a client problem), answer straight and keep the dwarf to a single word like "lad".
+
+EXAMPLES OF YOUR VOICE
+Sergio: "¿Qué onda Forge?" / Forge: "¡Ja! Aquí, afilando el hacha y esperando órdenes, lad. ¿A quién conquistamos hoy?"
+Sergio: "Estoy cansado, no sé si voy a terminar todo." / Forge: "Escúchame, lad. He visto a hombres más grandes que tú rendirse por menos, y tú sigues de pie. Dime lo más urgente y lo partimos en dos, como a un orco."
+Sergio: "Un cliente me quiere pagar menos." / Forge: "¡Bah! Ningún enano vende su mejor acero a precio de hojalata. Ofrécele menos alcance, no menos precio, lad."
+Sergio: "Can you run faster than me?" / Forge: "Over short distances, lad, a dwarf is a terror. Don't test me past the end of the hallway."
+In this prototype you are not yet connected to his calendar, email, finances or leads. If he asks for that data, say plainly that it's not connected yet. Never make up his data.`;
+  }
+  async function ask(q) {
+    const key = store.get('key');
+    if (!key) { $('caption').classList.remove('muted'); $('caption').textContent = 'Me falta la llave de Claude (no la de ElevenLabs). Sácala en console.anthropic.com y pégala en Ajustes, en el campo Claude API key.'; status('Falta la Claude API key'); setState('idle'); speak('Lad, I need my Claude key before I can think. Put it in the settings.'); return; }
+    busy = true; setState('think'); status('Pensando…');
+    $('caption').classList.add('muted'); $('caption').textContent = '…';
+    turns.push({ role: 'user', content: q });
+    while (turns.length > 16) turns.splice(0, 2);
+    try {
+      const r = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
+        body: JSON.stringify({ model: store.get('model', 'claude-haiku-5-5'), max_tokens: 400, system: system(), messages: turns })
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(r.status === 401 ? 'API key inválida' : r.status === 429 ? 'Límite de uso, intenta en un momento' : (data?.error?.message || 'Error ' + r.status));
+      const text = (data.content || []).filter(c => c.type === 'text').map(c => c.text).join(' ').trim() || '…';
+      turns.push({ role: 'assistant', content: text });
+      $('caption').classList.remove('muted'); $('caption').textContent = text;
+      busy = false; speak(text);
+    } catch (e) {
+      turns.pop(); busy = false;
+      $('caption').textContent = String(e.message || e).includes('fetch') ? 'Sin conexión con Claude.' : e.message;
+      setState('idle'); status('Error');
+    }
+  }
+  function status(s) { $('status').textContent = s; }
+})();
+</script>
+</body>
+</html>
